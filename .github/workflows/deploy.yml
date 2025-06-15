@@ -31,9 +31,9 @@ jobs:
           git pull origin main
 
           echo 'Rebuilding containers...'
-          docker-compose down
-          docker-compose build
-          docker-compose up -d
+          docker compose down
+          docker compose build
+          docker compose up -d
 
           echo 'Running Laravel setup in users_services...'
           docker exec users_services php artisan migrate --force || true
