@@ -40,7 +40,7 @@ jobs:
     - name: Deploy to EC2 and run Laravel commands
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
-          cd ~/your-project-folder
+          cd ~/laravel-microservices
 
           echo "Pulling updated Docker images..."
           docker pull ${{ secrets.DOCKER_USERNAME }}/users_services:latest
