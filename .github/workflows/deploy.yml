@@ -50,8 +50,8 @@ jobs:
           docker pull $DOCKER_USERNAME/custom-nginx:latest
 
           echo "Restarting services"
-          docker-compose down
-          docker-compose up -d
+          docker compose down
+          docker compose up -d
 
           echo "Running Laravel setup"
           docker exec users_services composer install --no-interaction --prefer-dist
