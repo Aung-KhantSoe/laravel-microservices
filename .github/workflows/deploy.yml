@@ -30,16 +30,16 @@ jobs:
           cd laravel-microservices
           git pull origin main
 
-          echo '🐳 Rebuilding containers...'
+          echo 'Rebuilding containers...'
           docker-compose down
           docker-compose build
           docker-compose up -d
 
-          echo '⚙️ Running Laravel setup in users_services...'
+          echo 'Running Laravel setup in users_services...'
           docker exec users_services php artisan migrate --force || true
           docker exec users_services php artisan config:cache || true
 
-          echo '⚙️ Running Laravel setup in contracts_services...'
+          echo 'Running Laravel setup in contracts_services...'
           docker exec contracts_services php artisan migrate --force || true
           docker exec contracts_services php artisan config:cache || true
         "
