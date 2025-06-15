@@ -2,6 +2,8 @@ name: Build, Push and Deploy Laravel Containers
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v1.0.0'
 
