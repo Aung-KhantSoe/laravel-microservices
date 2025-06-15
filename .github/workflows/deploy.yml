@@ -43,21 +43,14 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/laravel-microservices
-
-          echo "Pulling latest images"
-          docker pull $DOCKER_USERNAME/users_services:latest
-          docker pull $DOCKER_USERNAME/contracts_services:latest
-          docker pull $DOCKER_USERNAME/custom-nginx:latest
-
-          echo "Restarting services"
-          docker compose down
-          docker compose up -d
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d
 
           echo "Running Laravel setup"
-          docker exec users_services composer install --no-interaction --prefer-dist
-          docker exec users_services php artisan migrate:fresh --seed --force
-          docker exec users_services php artisan config:cache
+          docker exec $DOCKER_USERNAME/users_services composer install --no-interaction --prefer-dist
+          docker exec $DOCKER_USERNAME/users_services php artisan migrate:fresh --seed --force
+          docker exec $DOCKER_USERNAME/users_services php artisan config:cache
 
-          docker exec contracts_services composer install --no-interaction --prefer-dist
-          docker exec contracts_services php artisan migrate:fresh --seed --force
-          docker exec contracts_services php artisan config:cache
+          docker exec $DOCKER_USERNAME/contracts_services composer install --no-interaction --prefer-dist
+          docker exec $DOCKER_USERNAME/contracts_services php artisan migrate:fresh --seed --force
+          docker exec $DOCKER_USERNAME/contracts_services php artisan config:cache
