@@ -1,0 +1,44 @@
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - users_services
+      - contracts_services
+
+  users_services:
+    build:
+      context: ./users_services
+    volumes:
+      - ./users_services:/var/www
+    expose:
+      - "9000"
+    depends_on:
+      - db
+
+  contracts_services:
+    build:
+      context: ./contracts_services
+    volumes:
+      - ./contracts_services:/var/www
+    expose:
+      - "9000"
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: laravel_crud_api
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: secret 
+    volumes:
+      - db-data:/var/lib/mysql
+
+volumes:
+  db-data:
+
