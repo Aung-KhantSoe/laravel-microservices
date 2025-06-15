@@ -35,6 +35,15 @@ jobs:
         docker build -t $DOCKER_USERNAME/custom-nginx:latest ./nginx
         docker push $DOCKER_USERNAME/custom-nginx:latest
 
+    - name: Upload docker-compose.prod.yml to EC2
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "docker-compose.prod.yml"
+        target: "~/laravel-microservices"
+
     - name: Deploy on EC2
       uses: appleboy/ssh-action@v0.1.10
       with:
@@ -43,14 +52,22 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd ~/laravel-microservices
+
+          echo "Pulling latest images..."
           docker compose -f docker-compose.prod.yml pull
+
+          echo "Starting services..."
           docker compose -f docker-compose.prod.yml up -d
 
-          echo "Running Laravel setup"
+          echo "Waiting for containers to be ready..."
+          sleep 15
+
+          echo "Running Laravel setup in users_services..."
           docker exec $DOCKER_USERNAME/users_services composer install --no-interaction --prefer-dist
           docker exec $DOCKER_USERNAME/users_services php artisan migrate:fresh --seed --force
           docker exec $DOCKER_USERNAME/users_services php artisan config:cache
 
+          echo "Running Laravel setup in contracts_services..."
           docker exec $DOCKER_USERNAME/contracts_services composer install --no-interaction --prefer-dist
           docker exec $DOCKER_USERNAME/contracts_services php artisan migrate:fresh --seed --force
           docker exec $DOCKER_USERNAME/contracts_services php artisan config:cache
