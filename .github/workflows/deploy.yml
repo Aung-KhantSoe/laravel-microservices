@@ -1,71 +1,62 @@
-name: Build, Push, and Deploy Laravel Services
+name: Build, Push, and Deploy Laravel Containers
 
 on:
   push:
     branches:
-      - main
-    tags:
-      - 'v1.0.0'
+      - main  # or your main branch
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Extract version from tag
-        id: extract_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and Push users_services
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/users_services:latest ./users_services
-          docker tag ${{ secrets.DOCKER_USERNAME }}/users_services:latest ${{ secrets.DOCKER_USERNAME }}/users_services:${VERSION}
-          docker push ${{ secrets.DOCKER_USERNAME }}/users_services:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/users_services:${VERSION}
+    - name: Build and push users_services
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/users_services:latest ./users_services
+        docker push ${{ secrets.DOCKER_USERNAME }}/users_services:latest
 
-      - name: Build and Push contracts_services
-        run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest ./contracts_services
-          docker tag ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest ${{ secrets.DOCKER_USERNAME }}/contracts_services:${VERSION}
-          docker push ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/contracts_services:${VERSION}
+    - name: Build and push contracts_services
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest ./contracts_services
+        docker push ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Deploy to EC2 and run Laravel commands
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd ~/your-project-folder
+    - name: Deploy to EC2 and run Laravel commands
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd ~/your-project-folder
 
-            echo "Pulling updated Docker images..."
-            docker pull ${{ secrets.DOCKER_USERNAME }}/users_services:latest
-            docker pull ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest
+          echo "Pulling updated Docker images..."
+          docker pull ${{ secrets.DOCKER_USERNAME }}/users_services:latest
+          docker pull ${{ secrets.DOCKER_USERNAME }}/contracts_services:latest
 
-            echo "Restarting services..."
-            docker-compose down
-            docker-compose up -d
+          echo "Restarting containers..."
+          docker-compose down
+          docker-compose up -d
 
-            echo "Running Laravel setup in users_services..."
-            docker exec users_services composer install --no-interaction --prefer-dist
-            docker exec users_services php artisan migrate --force
-            docker exec users_services php artisan config:cache
+          echo "Running Laravel setup for users_services..."
+          docker exec users_services composer install --no-interaction --prefer-dist
+          docker exec users_services php artisan migrate --force
+          docker exec users_services php artisan config:cache
 
-            echo "Running Laravel setup in contracts_services..."
-            docker exec contracts_services composer install --no-interaction --prefer-dist
-            docker exec contracts_services php artisan migrate --force
-            docker exec contracts_services php artisan config:cache
-          EOF
+          echo "Running Laravel setup for contracts_services..."
+          docker exec contracts_services composer install --no-interaction --prefer-dist
+          docker exec contracts_services php artisan migrate --force
+          docker exec contracts_services php artisan config:cache
+        EOF
