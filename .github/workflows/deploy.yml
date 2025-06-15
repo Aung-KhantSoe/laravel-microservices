@@ -1,45 +1,63 @@
-name: Deploy to EC2
+name: Laravel Microservices CI/CD
 
 on:
   push:
     branches:
-      - main 
+      - main
+
+env:
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Set up SSH key
+    - name: Log in to Docker Hub
+      run: echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+
+    - name: Build & Push users_services
       run: |
-        echo "${{ secrets.EC2_SSH_KEY }}" > ec2_key.pem
-        chmod 600 ec2_key.pem
+        docker build -t $DOCKER_USERNAME/users_services:latest ./users_services
+        docker push $DOCKER_USERNAME/users_services:latest
 
-    - name: SSH to EC2 and deploy with Docker Compose
+    - name: Build & Push contracts_services
       run: |
-        ssh -o StrictHostKeyChecking=no -i ec2_key.pem ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} "
-          set -e
+        docker build -t $DOCKER_USERNAME/contracts_services:latest ./contracts_services
+        docker push $DOCKER_USERNAME/contracts_services:latest
 
-          echo 'Cloning or pulling latest code...'
-          if [ ! -d laravel-microservices ]; then
-            git clone https://github.com/Aung-KhantSoe/laravel-microservices.git laravel-microservices
-          fi
-          cd laravel-microservices
-          git pull origin main
+    - name: Build & Push custom-nginx
+      run: |
+        docker build -t $DOCKER_USERNAME/custom-nginx:latest ./nginx
+        docker push $DOCKER_USERNAME/custom-nginx:latest
 
-          echo 'Rebuilding containers...'
-          docker compose down
-          docker compose build
-          docker compose up -d
+    - name: Deploy on EC2
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          cd ~/laravel-microservices
 
-          echo 'Running Laravel setup in users_services...'
-          docker exec users_services php artisan migrate --force || true
-          docker exec users_services php artisan config:cache || true
+          echo "Pulling latest images"
+          docker pull $DOCKER_USERNAME/users_services:latest
+          docker pull $DOCKER_USERNAME/contracts_services:latest
+          docker pull $DOCKER_USERNAME/custom-nginx:latest
 
-          echo 'Running Laravel setup in contracts_services...'
-          docker exec contracts_services php artisan migrate --force || true
-          docker exec contracts_services php artisan config:cache || true
-        "
+          echo "Restarting services"
+          docker-compose down
+          docker-compose up -d
+
+          echo "Running Laravel setup"
+          docker exec users_services composer install --no-interaction --prefer-dist
+          docker exec users_services php artisan migrate:fresh --seed --force
+          docker exec users_services php artisan config:cache
+
+          docker exec contracts_services composer install --no-interaction --prefer-dist
+          docker exec contracts_services php artisan migrate:fresh --seed --force
+          docker exec contracts_services php artisan config:cache
