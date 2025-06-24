@@ -11,7 +11,7 @@ COPY . .
 RUN composer install --no-interaction --optimize-autoloader
 RUN npm install
 
-EXPOSE 8000
+EXPOSE 80
 
 CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=80"]
 # CMD php artisan migrate --force && php artisan db:seed --force && php artisan serve --host=0.0.0.0 --port=8000

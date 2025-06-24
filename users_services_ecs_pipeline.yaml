@@ -213,6 +213,8 @@ Resources:
             Value: !Ref AWS::AccountId
           - Name: SERVICE_NAME
             Value: !Ref ServiceName
+          - Name: CONTAINER_NAME
+            Value: user-container
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
@@ -227,16 +229,17 @@ Resources:
                 - IMAGE_TAG=latest-$COMMIT_HASH
             build:
               commands:
-                - echo Building Laravel Docker image...
-                - docker build -t $REPOSITORY_URI:latest -f users_services/Dockerfile users_services
-                - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+                - echo Building Laravel Docker image for linux/arm64...
+                - docker buildx create --use --platform linux/arm64 || true
+                - docker buildx build --platform linux/arm64 -t $REPOSITORY_URI:latest -t $REPOSITORY_URI:$IMAGE_TAG -f users_services/Dockerfile users_services --push
+
             post_build:
               commands:
                 - echo Pushing Docker image to ECR...
                 - docker push $REPOSITORY_URI:latest
                 - docker push $REPOSITORY_URI:$IMAGE_TAG
                 - echo Writing image definitions file...
-                - printf '[{"name":"%s","imageUri":"%s"}]' $SERVICE_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+                - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
           artifacts:
             files: imagedefinitions.json
       Tags:
