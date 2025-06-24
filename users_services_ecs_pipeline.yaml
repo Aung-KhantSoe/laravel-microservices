@@ -1,0 +1,307 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: >
+  This template shows how to use AWS CodePipeline and AWS CodeBuild to build an
+  automated continuous deployment pipeline to Amazon Elastic Container Service
+  (Amazon ECS) using clusters powered by AWS Fargate.
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "Common Parameters, it is same as Environment"
+        Parameters:
+          - Environment
+
+      - Label:
+          default: "Fargate"
+        Parameters:
+          - ServiceName
+
+          - ClusterName
+
+      - Label:
+          default: "Pipeline"
+        Parameters:
+          - ContainerRegistery
+          - RepositoryName
+          - BranchName
+          - ArtifactBucketStore
+          - ConnectionArn
+
+    ParameterLabels:
+      Environment:
+        default: "A tag is a label as well as Environment that you or AWS assigns to an AWS resource. You can use tags to organize your resources, and cost allocation tags to track your AWS costs on a detailed level."
+
+      ServiceName:
+        default: "Service is to run and maintain a specified number of instances of a task definition simultaneously in an Amazon ECS cluster"
+
+Parameters:
+  ServiceName:
+    Type: String
+    Default: uat-mbx-report-portal
+
+  ClusterName:
+    Type: String
+    Default: laravel-microservices
+    AllowedValues: [laravel-microservices]
+  ConnectionArn:
+    Type: String
+    Default: arn:aws:codeconnections:ap-southeast-1:408175678957:connection/173760dd-2416-4d97-b737-7d5482617590
+  ContainerRegistery:
+    Type: String
+    Default: uat-mbx-report-portal
+  RepositoryName:
+    Type: String
+    Default: ayainnovation/mobilex-reporting-portal
+  BranchName:
+    Type: String
+    Default: uat-release
+  Environment:
+    Type: String
+    Default: uat
+    Description: Tag name
+    AllowedPattern: '[a-zA-Z0-9\-_]+'
+    ConstraintDescription: Tag name should be alpha numberic letter
+  ArtifactBucketStore:
+    Type: String
+    Default: uat-mbx-report-portal
+
+Resources:
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: "UATMBXReportPortalBuildPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Resource: "*"
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+              - Resource: !Sub arn:aws:s3:::${ArtifactBucketStore}/*
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+              - Resource: "*"
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecretVersionIds
+              - Resource: "*"
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:GetRepositoryPolicy
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:DescribeImages
+                  - ecr:BatchGetImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecs:UpdateService
+
+      Tags:
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "Name"
+          Value: !Join ["-", [!Ref Environment, CodeBuildServiceRole]]
+
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: "RegulaPipelinePolicy"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Resource:
+                  - !Sub arn:aws:s3:::${ArtifactBucketStore}/*
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+              - Resource: "*"
+                Effect: Allow
+                Action:
+                  - codecommit:GetRepository
+                  - codecommit:ListBranches
+                  - codecommit:GetUploadArchiveStatus
+                  - codecommit:UploadArchive
+                  - codecommit:CancelUploadArchive
+                  - codedeploy:CreateDeployment
+                  - codedeploy:GetApplication
+                  - codedeploy:GetApplicationRevision
+                  - codedeploy:GetDeployment
+                  - codedeploy:GetDeploymentConfig
+                  - codedeploy:RegisterApplicationRevision
+                  - codebuild:StartBuild
+                  - codebuild:StopBuild
+                  - codebuild:BatchGet*
+                  - codebuild:Get*
+                  - codebuild:List*
+                  - codecommit:GetBranch
+                  - codecommit:GetCommit
+                  - s3:*
+                  - ecs:*
+                  - elasticloadbalancing:*
+                  - autoscaling:*
+                  - iam:PassRole
+              - Effect: Allow
+                Action:
+                  - codestar-connections:UseConnection
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - codepipeline:*
+                Resource: "*"
+      Tags:
+        - Key: "Environment"
+          Value: !Ref Environment
+        - Key: "Name"
+          Value: !Join ["-", [!Ref Environment, CodePipelineServiceRole]]
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref AWS::StackName
+      ServiceRole: !Ref CodeBuildServiceRole
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        PrivilegedMode: true
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: AWS_DEFAULT_REGION
+            Value: !Ref AWS::Region
+          - Name: REPOSITORY_URI
+            Value: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ContainerRegistery}
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: SERVICE_NAME
+            Value: !Ref ServiceName
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+
+          phases:
+            pre_build:
+              commands:
+                - echo Logging in to Amazon ECR...
+                - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+                - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+                - IMAGE_TAG=latest-$COMMIT_HASH
+            build:
+              commands:
+                - echo Building Laravel Docker image...
+                - docker build -t $REPOSITORY_URI:latest -f users_services/Dockerfile users_services
+                - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+            post_build:
+              commands:
+                - echo Pushing Docker image to ECR...
+                - docker push $REPOSITORY_URI:latest
+                - docker push $REPOSITORY_URI:$IMAGE_TAG
+                - echo Writing image definitions file...
+                - printf '[{"name":"%s","imageUri":"%s"}]' $SERVICE_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+          artifacts:
+            files: imagedefinitions.json
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Name
+          Value: !Join ["-", [!Ref Environment, CodeBuildProject]]
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    DependsOn:
+      - CodeBuildProject
+    Properties:
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      Name: !Ref AWS::StackName
+      ArtifactStores:
+        - Region: !Ref "AWS::Region"
+          ArtifactStore:
+            Type: S3
+            Location: !Ref ArtifactBucketStore
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GitLabSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceArtifact
+              Configuration:
+                ConnectionArn: !Ref ConnectionArn
+                FullRepositoryId: !Ref RepositoryName
+                BranchName: !Ref BranchName
+              RunOrder: 1
+
+        - Name: DockerImageBuild
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 1
+              InputArtifacts:
+                - Name: SourceArtifact
+              OutputArtifacts:
+                - Name: BuildOutput
+        - Name: DeployECS
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: ECS
+              Configuration:
+                ClusterName: !Ref ClusterName
+                ServiceName: !Ref ServiceName
+                FileName: imagedefinitions.json
+              RunOrder: 1
+              InputArtifacts:
+                - Name: BuildOutput
+              Region: !Ref "AWS::Region"
