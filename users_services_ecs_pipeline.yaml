@@ -43,8 +43,8 @@ Parameters:
 
   ClusterName:
     Type: String
-    Default: laravel-microservices
-    AllowedValues: [laravel-microservices]
+    Default: user-service-cluster
+    AllowedValues: [user-service-cluster]
   ConnectionArn:
     Type: String
     Default: arn:aws:codeconnections:ap-southeast-1:408175678957:connection/173760dd-2416-4d97-b737-7d5482617590
@@ -121,6 +121,12 @@ Resources:
                   - ecr:CompleteLayerUpload
                   - ecr:PutImage
                   - ecs:UpdateService
+                  - ecs:DescribeServices
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: arn:aws:ssm:ap-southeast-1:927803460910:parameter/users_services/env
+
 
       Tags:
         - Key: "Environment"
@@ -229,9 +235,18 @@ Resources:
                 - IMAGE_TAG=latest-$COMMIT_HASH
             build:
               commands:
-                - echo Building Laravel Docker image for linux/arm64...
-                - docker buildx create --use --platform linux/arm64 || true
-                - docker buildx build --platform linux/arm64 -t $REPOSITORY_URI:latest -t $REPOSITORY_URI:$IMAGE_TAG -f users_services/Dockerfile users_services --push
+                - echo Building Laravel Docker image for amd64...
+                - Read ENV value from SSM parameter store
+                - aws ssm get-parameter --name /users_services/env --region ap-southeast-1 --with-decryption --query "Parameter.Value" --output text > users_services/.env
+                - cat users_services/.env
+                - docker build -t $REPOSITORY_URI:latest -t $REPOSITORY_URI:$IMAGE_TAG -f users_services/Dockerfile users_services
+            build:
+              commands:
+                - echo Building Laravel Docker image for amd64...
+                - echo Fetching .env from SSM...
+                - aws ssm get-parameter --name /users_services/env --region ap-southeast-1 --with-decryption --query "Parameter.Value" --output text > users_services/.env
+                - cat users_services/.env
+                - docker build -t $REPOSITORY_URI:latest -t $REPOSITORY_URI:$IMAGE_TAG -f users_services/Dockerfile users_services
 
             post_build:
               commands:
@@ -240,6 +255,7 @@ Resources:
                 - docker push $REPOSITORY_URI:$IMAGE_TAG
                 - echo Writing image definitions file...
                 - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+
           artifacts:
             files: imagedefinitions.json
       Tags:

@@ -84,7 +84,7 @@ Resources:
         - FARGATE
       ExecutionRoleArn: !GetAtt UserTaskExecutionRole.Arn
       RuntimePlatform:
-        CpuArchitecture: ARM64
+        CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: user-container

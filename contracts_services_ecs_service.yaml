@@ -84,7 +84,7 @@ Resources:
         - FARGATE
       ExecutionRoleArn: !GetAtt ContractTaskExecutionRole.Arn
       RuntimePlatform:
-        CpuArchitecture: ARM64
+        CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: contract-container
